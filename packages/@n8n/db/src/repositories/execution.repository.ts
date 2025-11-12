@@ -19,6 +19,7 @@ import {
 	Not,
 	Repository,
 	And,
+	Like,
 } from '@n8n/typeorm';
 import { DateUtils } from '@n8n/typeorm/util/DateUtils';
 import { parse, stringify } from 'flatted';
@@ -1222,5 +1223,33 @@ export class ExecutionRepository extends Repository<ExecutionEntity> {
 		}
 		// Just return the string data as-is.
 		return data;
+	}
+
+	/**
+	 * Fetches potential sub-executions for a parent execution.
+	 * Returns executions with mode='integrated' that fall within the parent's time range.
+	 */
+	async findSubExecutions(
+		parentExecutionId: string,
+		workflowId: string,
+		startedAt: Date,
+		stoppedAt: Date,
+	): Promise<IExecutionFlattedDb[]> {
+		return await this.findMultipleExecutions(
+			{
+				where: {
+					workflowId,
+					mode: 'integrated',
+					startedAt: MoreThanOrEqual(startedAt),
+					stoppedAt: LessThanOrEqual(stoppedAt),
+					executionData: {
+						data: Like(`%"${parentExecutionId}"%`),
+					},
+				},
+				order: { startedAt: 'DESC' },
+				take: 100,
+			},
+			{ includeData: true },
+		);
 	}
 }
