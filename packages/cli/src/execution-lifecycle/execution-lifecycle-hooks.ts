@@ -186,7 +186,7 @@ function hookFunctionsPush(
 		});
 
 		pushInstance.send(
-			{ type: 'nodeExecuteBefore', data: { executionId, nodeName, data, parentExecutionId } },
+			{ type: 'nodeExecuteBefore', data: { executionId, nodeName, data } },
 			pushRef,
 		);
 	});
@@ -212,7 +212,6 @@ function hookFunctionsPush(
 					nodeName,
 					itemCountByConnectionType,
 					data: taskData,
-					parentExecutionId,
 				},
 			},
 			pushRef,
@@ -228,7 +227,7 @@ function hookFunctionsPush(
 		pushInstance.send(
 			{
 				type: 'nodeExecuteAfterData',
-				data: { executionId, nodeName, itemCountByConnectionType, data, parentExecutionId },
+				data: { executionId, nodeName, itemCountByConnectionType, data },
 			},
 			pushRef,
 			asBinary,
