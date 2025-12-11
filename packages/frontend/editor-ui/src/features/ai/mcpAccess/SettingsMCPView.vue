@@ -285,6 +285,12 @@ onMounted(async () => {
 	display: flex;
 	justify-content: space-between;
 	margin-bottom: var(--spacing--xl);
+
+	@media (max-width: 820px) {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: var(--spacing--2xs);
+	}
 }
 
 .headings {
