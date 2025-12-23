@@ -9,7 +9,7 @@ import {
 	type ChatSessionId,
 	ChatHubConversationModel,
 	ChatHubMessageStatus,
-	type EnrichedStructuredChunk,
+	type MessageChunk,
 	ChatHubBaseLLMModel,
 	ChatHubN8nModel,
 	ChatHubCustomAgentModel,
@@ -898,13 +898,9 @@ export class ChatHubService {
 		previousMessageId: string,
 		retryOfMessageId: string | null,
 	) {
-		const beginChunk: EnrichedStructuredChunk = {
+		const beginChunk: MessageChunk = {
 			type: 'begin',
 			metadata: {
-				nodeId: messageId,
-				nodeName: '',
-				runIndex: 0,
-				itemIndex: 0,
 				timestamp: Date.now(),
 				messageId,
 				previousMessageId,
@@ -940,14 +936,10 @@ export class ChatHubService {
 		previousMessageId: string,
 		retryOfMessageId: string | null,
 	) {
-		const contentChunk: EnrichedStructuredChunk = {
+		const contentChunk: MessageChunk = {
 			type: 'item',
 			content,
 			metadata: {
-				nodeId: messageId,
-				nodeName: '',
-				runIndex: 0,
-				itemIndex: 0,
 				timestamp: Date.now(),
 				messageId,
 				previousMessageId,
@@ -959,13 +951,9 @@ export class ChatHubService {
 		res.write(jsonStringify(contentChunk) + '\n');
 		res.flush();
 
-		const endChunk: EnrichedStructuredChunk = {
+		const endChunk: MessageChunk = {
 			type: 'end',
 			metadata: {
-				nodeId: messageId,
-				nodeName: '',
-				runIndex: 0,
-				itemIndex: 0,
 				timestamp: Date.now(),
 				messageId,
 				previousMessageId,
@@ -1064,10 +1052,10 @@ export class ChatHubService {
 			}
 
 			const message = aggregator.ingest(chunk);
-			const enriched: EnrichedStructuredChunk = {
+			const messageChunk: MessageChunk = {
 				...chunk,
 				metadata: {
-					...chunk.metadata,
+					timestamp: chunk.metadata.timestamp,
 					messageId: message.id,
 					previousMessageId: message.previousMessageId,
 					retryOfMessageId: message.retryOfMessageId,
@@ -1075,7 +1063,7 @@ export class ChatHubService {
 				},
 			};
 
-			return jsonStringify(enriched) + '\n';
+			return jsonStringify(messageChunk) + '\n';
 		};
 
 		const stream = interceptResponseWrites(res, transform);
