@@ -38,6 +38,57 @@ import { type ExecutionSaveSettings, toSaveSettings } from './to-save-settings';
 import { getItemCountByConnectionType } from '@/utils/get-item-count-by-connection-type';
 import { getDataLastExecutedNodeData } from '@/workflow-helpers';
 
+type SaveDecisionContext = {
+	executionId: string;
+	workflowId: string;
+	mode: WorkflowExecuteMode;
+	workflowData: IWorkflowBase;
+};
+
+/**
+ * Determines if an execution should be saved and handles deletion if not.
+ * Used by both main and worker processes. Fixes CAT-1437.
+ */
+export async function handleExecutionSaveDecision(
+	fullRunData: IRun,
+	saveSettings: ExecutionSaveSettings,
+	context: SaveDecisionContext,
+	retryOf?: string,
+): Promise<boolean> {
+	const executionRepository = Container.get(ExecutionRepository);
+	const isManualExecution = context.mode === 'manual';
+	const isWaiting = !!fullRunData.waitTill;
+
+	if (isManualExecution && !saveSettings.manual && !isWaiting) {
+		// Soft-delete so user can still access binary data while building workflow
+		await executionRepository.softDelete(context.executionId);
+		return false;
+	}
+
+	const shouldNotSave =
+		(fullRunData.status === 'success' && !saveSettings.success) ||
+		(fullRunData.status !== 'success' && !saveSettings.error);
+
+	if (shouldNotSave && !isWaiting && !isManualExecution) {
+		executeErrorWorkflow(
+			context.workflowData,
+			fullRunData,
+			context.mode,
+			context.executionId,
+			retryOf,
+		);
+
+		await executionRepository.hardDelete({
+			workflowId: context.workflowId,
+			executionId: context.executionId,
+		});
+
+		return false;
+	}
+
+	return true;
+}
+
 @Service()
 class ModulesHooksRegistry {
 	addHooks(hooks: ExecutionLifecycleHooks) {
@@ -346,7 +397,6 @@ function hookFunctionsSave(
 ) {
 	const logger = Container.get(Logger);
 	const errorReporter = Container.get(ErrorReporter);
-	const executionRepository = Container.get(ExecutionRepository);
 	const binaryDataService = Container.get(BinaryDataService);
 	const workflowStaticDataService = Container.get(WorkflowStaticDataService);
 	const workflowStatisticsService = Container.get(WorkflowStatisticsService);
@@ -382,33 +432,19 @@ function hookFunctionsSave(
 				}
 			}
 
-			if (isManualMode && !saveSettings.manual && !fullRunData.waitTill) {
-				/**
-				 * When manual executions are not being saved, we only soft-delete
-				 * the execution so that the user can access its binary data
-				 * while building their workflow.
-				 *
-				 * The manual execution and its binary data will be hard-deleted
-				 * on the next pruning cycle after the grace period set by
-				 * `EXECUTIONS_DATA_HARD_DELETE_BUFFER`.
-				 */
-				await executionRepository.softDelete(this.executionId);
-
-				return;
-			}
-
-			const shouldNotSave =
-				(fullRunData.status === 'success' && !saveSettings.success) ||
-				(fullRunData.status !== 'success' && !saveSettings.error);
-
-			if (shouldNotSave && !fullRunData.waitTill && !isManualMode) {
-				executeErrorWorkflow(this.workflowData, fullRunData, this.mode, this.executionId, retryOf);
-
-				await executionRepository.hardDelete({
-					workflowId: this.workflowData.id,
+			const shouldSave = await handleExecutionSaveDecision(
+				fullRunData,
+				saveSettings,
+				{
 					executionId: this.executionId,
-				});
+					workflowId: this.workflowData.id,
+					mode: this.mode,
+					workflowData: this.workflowData,
+				},
+				retryOf,
+			);
 
+			if (!shouldSave) {
 				return;
 			}
 
@@ -445,13 +481,11 @@ function hookFunctionsSave(
 }
 
 /**
- * Returns hook functions to save workflow execution and call error workflow
- * for running with queues. Manual executions should never run on queues as
- * they are always executed in the main process.
+ * Returns hook functions to save workflow execution for queue mode workers.
  */
 function hookFunctionsSaveWorker(
 	hooks: ExecutionLifecycleHooks,
-	{ pushRef, retryOf }: HooksSetupParameters,
+	{ pushRef, retryOf, saveSettings }: HooksSetupParameters,
 ) {
 	const logger = Container.get(Logger);
 	const errorReporter = Container.get(ErrorReporter);
@@ -478,6 +512,22 @@ function hookFunctionsSaveWorker(
 						{ workflowId: this.workflowData.id },
 					);
 				}
+			}
+
+			const shouldSave = await handleExecutionSaveDecision(
+				fullRunData,
+				saveSettings,
+				{
+					executionId: this.executionId,
+					workflowId: this.workflowData.id,
+					mode: this.mode,
+					workflowData: this.workflowData,
+				},
+				retryOf,
+			);
+
+			if (!shouldSave) {
+				return;
 			}
 
 			if (!isManualMode && fullRunData.status !== 'success' && fullRunData.status !== 'waiting') {

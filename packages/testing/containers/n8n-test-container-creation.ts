@@ -41,7 +41,13 @@ import {
 	type ScrapeTarget,
 } from './n8n-test-container-observability';
 import { setupTracingStack, type TracingStack } from './n8n-test-container-tracing';
-import { createElapsedLogger, createSilentLogConsumer } from './n8n-test-container-utils';
+import {
+	createElapsedLogger,
+	createSilentLogConsumer,
+	getResourceQuotaFromEnv,
+	getMainResourceQuotaFromEnv,
+	getWorkerResourceQuotaFromEnv,
+} from './n8n-test-container-utils';
 import { waitForNetworkQuiet } from './network-stabilization';
 import { TEST_CONTAINER_IMAGES } from './test-containers';
 
@@ -65,6 +71,8 @@ const BASE_ENV: Record<string, string> = {
 	QUEUE_HEALTH_CHECK_ACTIVE: 'true',
 	N8N_DIAGNOSTICS_ENABLED: 'false',
 	N8N_METRICS: 'true',
+	N8N_METRICS_INCLUDE_QUEUE_METRICS: 'true',
+	N8N_METRICS_QUEUE_METRICS_INTERVAL: '5', // Emit queue metrics every 5 seconds for faster tests
 	NODE_ENV: 'development',
 	N8N_LICENSE_TENANT_ID: process.env.N8N_LICENSE_TENANT_ID ?? '1001',
 	N8N_LICENSE_ACTIVATION_KEY: process.env.N8N_LICENSE_ACTIVATION_KEY ?? '',
@@ -97,7 +105,18 @@ export interface N8NConfig {
 		  };
 	env?: Record<string, string>;
 	projectName?: string;
+	/** Resource quota applied to all n8n containers (main and worker) */
 	resourceQuota?: {
+		memory?: number; // in GB
+		cpu?: number; // in cores
+	};
+	/** Resource quota applied only to main instances (overrides resourceQuota for main) */
+	mainResourceQuota?: {
+		memory?: number; // in GB
+		cpu?: number; // in cores
+	};
+	/** Resource quota applied only to worker instances (overrides resourceQuota for worker) */
+	workerResourceQuota?: {
 		memory?: number; // in GB
 		cpu?: number; // in cores
 	};
@@ -161,7 +180,9 @@ export async function createN8NStack(config: N8NConfig = {}): Promise<N8NStack> 
 		env = {},
 		proxyServerEnabled = false,
 		projectName,
-		resourceQuota,
+		resourceQuota = getResourceQuotaFromEnv(),
+		mainResourceQuota = getMainResourceQuotaFromEnv(),
+		workerResourceQuota = getWorkerResourceQuotaFromEnv(),
 		taskRunner,
 		sourceControl = false,
 		email = false,
@@ -457,6 +478,8 @@ export async function createN8NStack(config: N8NConfig = {}): Promise<N8NStack> 
 			environment,
 			network,
 			resourceQuota,
+			mainResourceQuota,
+			workerResourceQuota,
 			keycloakCertPem,
 		});
 		containers.push(...instances);
@@ -484,6 +507,8 @@ export async function createN8NStack(config: N8NConfig = {}): Promise<N8NStack> 
 			network,
 			directPort: assignedPort,
 			resourceQuota,
+			mainResourceQuota,
+			workerResourceQuota,
 			keycloakCertPem,
 		});
 		containers.push(...instances);
@@ -613,6 +638,14 @@ interface CreateInstancesOptions {
 		memory?: number; // in GB
 		cpu?: number; // in cores
 	};
+	mainResourceQuota?: {
+		memory?: number; // in GB
+		cpu?: number; // in cores
+	};
+	workerResourceQuota?: {
+		memory?: number; // in GB
+		cpu?: number; // in cores
+	};
 	keycloakCertPem?: string;
 }
 
@@ -625,10 +658,16 @@ async function createN8NInstances({
 	/** The host port to use for the main instance */
 	directPort,
 	resourceQuota,
+	mainResourceQuota,
+	workerResourceQuota,
 	keycloakCertPem,
 }: CreateInstancesOptions): Promise<StartedTestContainer[]> {
 	const instances: StartedTestContainer[] = [];
 	const log = createElapsedLogger('n8n-instances');
+
+	// Determine effective quotas (specific overrides general)
+	const effectiveMainQuota = mainResourceQuota ?? resourceQuota;
+	const effectiveWorkerQuota = workerResourceQuota ?? resourceQuota;
 
 	// Create main instances sequentially to avoid database migration conflicts
 	for (let i = 1; i <= mainCount; i++) {
@@ -643,7 +682,7 @@ async function createN8NInstances({
 			instanceNumber: i,
 			networkAlias: name, // Use container name as network alias for VictoriaMetrics scraping
 			directPort: i === 1 ? directPort : undefined, // Only first main gets direct port
-			resourceQuota,
+			resourceQuota: effectiveMainQuota,
 			keycloakCertPem,
 		});
 		instances.push(container);
@@ -661,7 +700,7 @@ async function createN8NInstances({
 			network,
 			isWorker: true,
 			instanceNumber: i,
-			resourceQuota,
+			resourceQuota: effectiveWorkerQuota,
 			keycloakCertPem,
 		});
 		instances.push(container);
