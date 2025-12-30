@@ -827,6 +827,64 @@ describe('Execution Lifecycle Hooks', () => {
 				);
 			});
 		});
+
+		describe('saving execution data (hookFunctionsSave)', () => {
+			it('should delete successful executions when success saving is disabled', async () => {
+				workflowData.settings = {
+					saveDataSuccessExecution: 'none',
+					saveDataErrorExecution: 'all',
+				};
+				lifecycleHooks = createHooks('webhook');
+
+				await lifecycleHooks.runHook('workflowExecuteAfter', [successfulRun, {}]);
+
+				expect(executionRepository.hardDelete).toHaveBeenCalledWith({
+					workflowId,
+					executionId,
+				});
+			});
+
+			it('should delete failed executions when error saving is disabled', async () => {
+				workflowData.settings = {
+					saveDataSuccessExecution: 'all',
+					saveDataErrorExecution: 'none',
+				};
+				lifecycleHooks = createHooks('webhook');
+
+				await lifecycleHooks.runHook('workflowExecuteAfter', [failedRun, {}]);
+
+				expect(executionRepository.hardDelete).toHaveBeenCalledWith({
+					workflowId,
+					executionId,
+				});
+			});
+
+			it('should save successful executions when success saving is enabled', async () => {
+				workflowData.settings = {
+					saveDataSuccessExecution: 'all',
+					saveDataErrorExecution: 'all',
+				};
+				lifecycleHooks = createHooks('webhook');
+
+				await lifecycleHooks.runHook('workflowExecuteAfter', [successfulRun, {}]);
+
+				expect(executionRepository.hardDelete).not.toHaveBeenCalled();
+				expect(executionRepository.updateExistingExecution).toHaveBeenCalled();
+			});
+
+			it('should save failed executions when error saving is enabled', async () => {
+				workflowData.settings = {
+					saveDataSuccessExecution: 'all',
+					saveDataErrorExecution: 'all',
+				};
+				lifecycleHooks = createHooks('webhook');
+
+				await lifecycleHooks.runHook('workflowExecuteAfter', [failedRun, {}]);
+
+				expect(executionRepository.hardDelete).not.toHaveBeenCalled();
+				expect(executionRepository.updateExistingExecution).toHaveBeenCalled();
+			});
+		});
 	});
 
 	describe('getLifecycleHooksForSubExecutions', () => {
