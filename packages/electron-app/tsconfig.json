@@ -1,0 +1,19 @@
+{
+	"compilerOptions": {
+		"outDir": "./dist",
+		"rootDir": "./src",
+		"module": "commonjs",
+		"target": "ES2022",
+		"lib": ["ES2022"],
+		"esModuleInterop": true,
+		"skipLibCheck": true,
+		"strict": false,
+		"resolveJsonModule": true,
+		"moduleResolution": "node",
+		"types": ["node", "electron"],
+		"declaration": false,
+		"sourceMap": true
+	},
+	"include": ["src/**/*"],
+	"exclude": ["node_modules", "dist"]
+}

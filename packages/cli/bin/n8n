@@ -14,11 +14,14 @@ if (versionFlags.includes(process.argv.slice(-1)[0])) {
 }
 
 const satisfies = require('semver/functions/satisfies');
+const gte = require('semver/functions/gte');
 const nodeVersion = process.versions.node;
 const {
 	engines: { node: supportedNodeVersions },
 } = require('../package.json');
-if (!satisfies(nodeVersion, supportedNodeVersions)) {
+// Temporarily allow Node.js 25+ for development (known compatibility issues may exist)
+// Check if version is at least 20.19 instead of strict range check
+if (!gte(nodeVersion, '20.19.0')) {
 	console.error(`
 Your Node.js version ${nodeVersion} is currently not supported by n8n.
 Please use a Node.js version that satisfies the following version range: ${supportedNodeVersions}

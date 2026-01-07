@@ -1,0 +1,76 @@
+{
+  "name": "n8n-electron",
+  "version": "2.3.0",
+  "description": "n8n Desktop Application",
+  "main": "dist/main.js",
+  "author": "n8n",
+  "license": "SEE LICENSE IN LICENSE.md",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.50",
+    "electron": "^32.0.0",
+    "electron-builder": "^25.1.8",
+    "typescript": "catalog:"
+  },
+  "dependencies": {
+    "n8n": "workspace:*",
+    "@n8n/i18n": "workspace:*"
+  },
+  "build": {
+    "appId": "io.n8n.electron",
+    "productName": "n8n",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "node_modules/**/*",
+      "!node_modules/@n8n/**/src/**",
+      "!node_modules/@n8n/**/*.ts",
+      "!**/*.map"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.developer-tools"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "assets/icon.png",
+      "category": "Development"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}
+
